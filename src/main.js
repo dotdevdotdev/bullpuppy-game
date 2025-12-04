@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnvironment } from './environment.js';
 import { DogManager } from './dogManager.js';
+import { InteractionManager } from './interaction.js';
+import { UI } from './ui.js';
+import { DogController } from './dogController.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -39,6 +42,34 @@ createEnvironment(scene);
 // Dog manager
 const dogManager = new DogManager(scene, camera, renderer);
 
+// Interaction manager (pick/fling dogs)
+const interactionManager = new InteractionManager(scene, camera, renderer, dogManager);
+
+// UI (toolbar and status panel)
+const ui = new UI(dogManager);
+
+// Dog controller (third-person mode)
+const dogController = new DogController(camera, controls);
+
+// Wire up interaction -> UI
+interactionManager.onDogSelected = (dog) => {
+  ui.showStatusPanel(dog);
+};
+
+interactionManager.onDogDeselected = () => {
+  ui.hideStatusPanel();
+};
+
+// Wire up UI -> dog controller
+ui.onBecomeDog = (dog) => {
+  dogController.enterDogMode(dog);
+};
+
+// Wire up dog controller exit
+dogController.onExitDogMode = () => {
+  // Camera will smoothly return via orbit controls
+};
+
 // Load dogs
 dogManager.load().catch((err) => {
   console.error('Failed to load dogs:', err);
@@ -59,11 +90,22 @@ function animate() {
 
   const delta = clock.getDelta();
 
-  // Update dogs
+  // Update dog controller (handles player-controlled dog)
+  dogController.update(delta);
+
+  // Update interaction manager (handles physics for flung dogs)
+  interactionManager.update(delta);
+
+  // Update dogs (AI behavior)
   dogManager.update(delta);
 
-  // Update controls
-  controls.update();
+  // Update UI (status panel refresh)
+  ui.update();
+
+  // Update controls (only if not in dog mode)
+  if (!dogController.isActive) {
+    controls.update();
+  }
 
   // Render
   renderer.render(scene, camera);
@@ -80,5 +122,5 @@ window.addEventListener('resize', () => {
 animate();
 
 console.log('Bullpuppy Family Simulation loaded!');
-console.log('Watch as puppies grow up, find mates, and start families!');
-console.log('Use your mouse to lead dogs around.');
+console.log('Click dogs to see their stats. Drag to pick up and fling!');
+console.log('Use the toolbar to spawn new dogs.');

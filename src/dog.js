@@ -55,6 +55,17 @@ export class Dog {
     this.isFollowingCursor = false;
     this.followTarget = null; // Another dog to follow
 
+    // Physics state (for pick/fling)
+    this.isPicked = false;
+    this.isFlying = false;
+    this.velocity = new THREE.Vector3();
+
+    // Player control state
+    this.isPlayerControlled = false;
+
+    // Birth time for stats
+    this.birthTime = Date.now();
+
     // Position
     if (options.position) {
       this.model.position.copy(options.position);
@@ -400,8 +411,50 @@ export class Dog {
     return closest;
   }
 
+  updatePhysics(delta) {
+    if (!this.isFlying) return;
+
+    // Apply gravity
+    this.velocity.y -= 25 * delta;
+
+    // Move
+    this.model.position.x += this.velocity.x * delta;
+    this.model.position.y += this.velocity.y * delta;
+    this.model.position.z += this.velocity.z * delta;
+
+    // Ground collision
+    if (this.model.position.y <= this.yOffset) {
+      this.model.position.y = this.yOffset;
+      this.velocity.set(0, 0, 0);
+      this.isFlying = false;
+      // Play landing effect - squash
+      this.setState('idle');
+    }
+
+    // Bounds
+    this.model.position.x = THREE.MathUtils.clamp(this.model.position.x, -BOUNDS / 2, BOUNDS / 2);
+    this.model.position.z = THREE.MathUtils.clamp(this.model.position.z, -BOUNDS / 2, BOUNDS / 2);
+
+    // Face velocity direction while flying
+    if (this.velocity.length() > 0.1) {
+      const targetAngle = Math.atan2(this.velocity.x, this.velocity.z);
+      this.model.rotation.y = THREE.MathUtils.lerp(this.model.rotation.y, targetAngle, delta * 5);
+    }
+  }
+
   update(delta, cursorWorldPos, allDogs) {
     this.mixer.update(delta);
+
+    // Skip all AI when picked or flying
+    if (this.isPicked || this.isFlying) {
+      return;
+    }
+
+    // Skip AI when player controlled (but still age)
+    if (this.isPlayerControlled) {
+      this.updateAge(delta);
+      return;
+    }
 
     // Age
     this.updateAge(delta);

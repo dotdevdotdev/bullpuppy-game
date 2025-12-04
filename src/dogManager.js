@@ -82,22 +82,32 @@ export class DogManager {
   }
 
   createInitialPopulation() {
-    // Just 2 dogs for testing courtship/breeding
+    // Create a starter family: Daddy + Mommy pair
+    const family1 = this.createFamily(
+      new THREE.Vector3(-8, 0, -5),
+      new THREE.Vector3(-6, 0, -5)
+    );
+
+    // Add 2 puppies to the family
+    this.spawnPuppy(family1, new THREE.Vector3(-7, 0, -3), GENDER.MALE);
+    this.spawnPuppy(family1, new THREE.Vector3(-7, 0, -7), GENDER.FEMALE);
+
+    // Create 2 young dogs (ready to mate and form new family)
     this.createDog({
       gender: GENDER.MALE,
       lifeStage: LIFE_STAGE.DOG,
       age: AGE.MATURITY_AGE,
-      position: new THREE.Vector3(-8, 0, 0),
+      position: new THREE.Vector3(8, 0, 5),
     });
 
     this.createDog({
       gender: GENDER.FEMALE,
       lifeStage: LIFE_STAGE.DOG,
       age: AGE.MATURITY_AGE,
-      position: new THREE.Vector3(8, 0, 0),
+      position: new THREE.Vector3(10, 0, 5),
     });
 
-    console.log(`Created ${this.dogs.length} dogs for testing`);
+    console.log(`Created ${this.dogs.length} dogs in ${this.families.length} families`);
   }
 
   createFamily(daddyPos, mommyPos) {
