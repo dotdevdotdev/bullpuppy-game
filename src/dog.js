@@ -33,6 +33,10 @@ export class Dog {
 
     // Clone and setup model
     this.model = clone(baseModel);
+
+    // Store the base scale from the normalized model
+    this.baseScale = baseModel.scale.x; // Assumes uniform scale
+
     this.setupAnimations(animations);
 
     // Apply appearance based on type
@@ -126,8 +130,9 @@ export class Dog {
   }
 
   updateAppearance() {
-    const scale = this.getScale();
-    this.model.scale.setScalar(scale);
+    const typeScale = this.getScale();
+    const finalScale = this.baseScale * typeScale;
+    this.model.scale.setScalar(finalScale);
 
     // Apply color tint
     const tint = this.getColorTint();
