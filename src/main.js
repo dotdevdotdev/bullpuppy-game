@@ -37,7 +37,7 @@ controls.target.set(0, 0, 0);
 createEnvironment(scene);
 
 // Puppy manager
-const puppyManager = new PuppyManager(scene);
+const puppyManager = new PuppyManager(scene, camera, renderer);
 
 // Load puppies
 const PUPPY_COUNT = 12;
