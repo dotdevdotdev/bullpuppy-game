@@ -259,16 +259,25 @@ export class Dog {
     this.courtshipTimer += delta;
     this.courtshipJumpTimer += delta;
 
-    // Circle around partner
-    this.courtshipAngle += COURTSHIP.CIRCLE_SPEED * delta;
-    const radius = 2;
-    const partnerPos = this.courtshipPartner.model.position;
+    // Calculate shared center between the two dogs (for tail-chase effect)
+    const center = new THREE.Vector3().addVectors(
+      this.model.position,
+      this.courtshipPartner.model.position
+    ).multiplyScalar(0.5);
 
+    // Slow circle around shared center - both dogs orbit same point, 180° apart
+    this.courtshipAngle += COURTSHIP.CIRCLE_SPEED * delta * 0.5;
+    const radius = 2.5;
+
+    // Target position on the circle
     this.target.set(
-      partnerPos.x + Math.sin(this.courtshipAngle) * radius,
+      center.x + Math.sin(this.courtshipAngle) * radius,
       0,
-      partnerPos.z + Math.cos(this.courtshipAngle) * radius
+      center.z + Math.cos(this.courtshipAngle) * radius
     );
+
+    // Slow walking speed during courtship
+    this.targetSpeed = this.getWalkSpeed() * 0.6;
 
     // Jump periodically
     if (this.courtshipJumpTimer >= COURTSHIP.JUMP_INTERVAL) {
@@ -278,21 +287,15 @@ export class Dog {
       }
     }
 
-    // Face partner
-    const toPartner = new THREE.Vector3().subVectors(partnerPos, this.model.position);
-    const targetAngle = Math.atan2(toPartner.x, toPartner.z);
-    this.model.rotation.y = THREE.MathUtils.lerp(
-      this.model.rotation.y,
-      targetAngle,
-      delta * 3
-    );
+    // Don't manually set rotation here - let moveTowardsTarget handle it
+    // This way dogs face their movement direction (chasing the other's tail)
 
     // Courtship complete!
     if (this.courtshipTimer >= COURTSHIP.DURATION) {
       return true; // Signal breeding should happen
     }
 
-    // Move towards target while circling
+    // Always walk during courtship (not run)
     if (this.state !== 'jump') {
       this.setState('walk');
     }
@@ -521,7 +524,7 @@ export class Dog {
     position.x = THREE.MathUtils.clamp(position.x, -BOUNDS / 2, BOUNDS / 2);
     position.z = THREE.MathUtils.clamp(position.z, -BOUNDS / 2, BOUNDS / 2);
 
-    // Rotation
+    // Rotation - face movement direction
     const targetAngle = Math.atan2(direction.x, direction.z);
     let currentAngle = this.model.rotation.y;
 
