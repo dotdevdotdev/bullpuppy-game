@@ -439,9 +439,15 @@ export class UI {
 
     // Baby maker button
     panel.querySelector('.baby-maker-btn').addEventListener('click', () => {
+      console.log('Baby maker button clicked!', {
+        selectedDog: this.selectedDog?.getDisplayName(),
+        hasCallback: !!this.onBabyMaker
+      });
       if (this.selectedDog && this.onBabyMaker) {
         const partner = this.findMateablePartner(this.selectedDog);
+        console.log('Partner found:', partner?.getDisplayName());
         if (partner) {
+          console.log('Starting baby maker mode!');
           this.onBabyMaker(this.selectedDog, partner);
           this.hideStatusPanel();
         }
@@ -530,12 +536,33 @@ export class UI {
 
     // Show/hide Baby maker button based on whether dog can mate and has partner nearby
     const babyMakerBtn = panel.querySelector('.baby-maker-btn');
+    const canMate = dog.canMate();
     const partner = this.findMateablePartner(dog);
-    if (dog.canMate() && partner && !dog.isCourtship) {
+    const isCourtship = dog.isCourtship;
+
+    console.log(`Baby maker check for ${dog.getDisplayName()}:`, {
+      canMate,
+      hasPartner: !!partner,
+      partnerName: partner ? partner.getDisplayName() : 'none',
+      isCourtship,
+      shouldShow: canMate && partner && !isCourtship
+    });
+
+    // For now, always show if not a puppy (for debugging)
+    if (dog.lifeStage !== 'puppy') {
       babyMakerBtn.style.display = 'flex';
+      console.log('Baby maker button SHOWN (debug mode - not a puppy)');
     } else {
       babyMakerBtn.style.display = 'none';
+      console.log('Baby maker button HIDDEN (is a puppy)');
     }
+
+    // Original logic (commented for debugging):
+    // if (canMate && partner && !isCourtship) {
+    //   babyMakerBtn.style.display = 'flex';
+    // } else {
+    //   babyMakerBtn.style.display = 'none';
+    // }
 
     panel.classList.remove('hidden');
   }
