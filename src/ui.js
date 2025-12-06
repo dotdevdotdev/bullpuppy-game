@@ -8,9 +8,16 @@ export class UI {
 
     // Callbacks
     this.onBecomeDog = null;
+    this.onBabyMaker = null;
+    this.onStopBabyMaker = null;
+
+    // Baby maker state
+    this.isBabyMakerActive = false;
+    this.babyMakerBabyCount = 0;
 
     this.createToolbar();
     this.createStatusPanel();
+    this.createBabyMakerOverlay();
     this.createStyles();
   }
 
@@ -193,6 +200,62 @@ export class UI {
         font-weight: 500;
       }
 
+      .action-btn.baby-maker-btn {
+        background: rgba(255, 105, 180, 0.3);
+        border-color: rgba(255, 105, 180, 0.6);
+      }
+
+      .action-btn.baby-maker-btn:hover {
+        background: rgba(255, 105, 180, 0.5);
+        border-color: rgba(255, 105, 180, 0.9);
+      }
+
+      .action-btn.baby-maker-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .action-btn.stop-btn {
+        background: rgba(255, 69, 0, 0.4);
+        border-color: rgba(255, 69, 0, 0.7);
+      }
+
+      .action-btn.stop-btn:hover {
+        background: rgba(255, 69, 0, 0.6);
+        border-color: rgba(255, 69, 0, 0.9);
+      }
+
+      /* Baby maker mode overlay */
+      #baby-maker-overlay {
+        position: fixed;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255, 105, 180, 0.9);
+        border-radius: 12px;
+        padding: 16px 24px;
+        z-index: 150;
+        font-family: system-ui, sans-serif;
+        color: white;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(255, 105, 180, 0.4);
+      }
+
+      #baby-maker-overlay.hidden {
+        display: none;
+      }
+
+      #baby-maker-overlay .baby-count {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 8px;
+      }
+
+      #baby-maker-overlay .baby-message {
+        font-size: 14px;
+        margin-bottom: 12px;
+      }
+
       /* Cursor styles */
       canvas {
         cursor: default;
@@ -353,6 +416,10 @@ export class UI {
           <span class="action-icon">🎮</span>
           <span class="action-label">Become Dog</span>
         </button>
+        <button class="action-btn baby-maker-btn" style="display: none;">
+          <span class="action-icon">💕</span>
+          <span class="action-label">Baby maker!</span>
+        </button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -370,7 +437,81 @@ export class UI {
       }
     });
 
+    // Baby maker button
+    panel.querySelector('.baby-maker-btn').addEventListener('click', () => {
+      if (this.selectedDog && this.onBabyMaker) {
+        const partner = this.findMateablePartner(this.selectedDog);
+        if (partner) {
+          this.onBabyMaker(this.selectedDog, partner);
+          this.hideStatusPanel();
+        }
+      }
+    });
+
     this.statusPanel = panel;
+  }
+
+  createBabyMakerOverlay() {
+    const overlay = document.createElement('div');
+    overlay.id = 'baby-maker-overlay';
+    overlay.className = 'hidden';
+    overlay.innerHTML = `
+      <div class="baby-count">0 babies!</div>
+      <div class="baby-message">Keep circling for more babies...</div>
+      <button class="action-btn stop-btn">
+        <span class="action-icon">✋</span>
+        <span class="action-label">Stop!</span>
+      </button>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('.stop-btn').addEventListener('click', () => {
+      if (this.onStopBabyMaker) {
+        this.onStopBabyMaker();
+      }
+    });
+
+    this.babyMakerOverlay = overlay;
+  }
+
+  findMateablePartner(dog) {
+    if (!dog.canMate()) {
+      console.log(`${dog.getDisplayName()} cannot mate - lifeStage: ${dog.lifeStage}, mate: ${dog.mate ? 'yes' : 'no'}`);
+      return null;
+    }
+
+    for (const other of this.dogManager.dogs) {
+      if (other === dog) continue;
+      if (!dog.canMateWith(other)) continue;
+
+      const dist = dog.model.position.distanceTo(other.model.position);
+      console.log(`Distance between ${dog.getDisplayName()} and ${other.getDisplayName()}: ${dist.toFixed(1)}`);
+      if (dist < 15) { // Within reasonable distance (increased from 10)
+        return other;
+      }
+    }
+    console.log(`No mateable partner found within range for ${dog.getDisplayName()}`);
+    return null;
+  }
+
+  showBabyMakerOverlay(babyCount) {
+    this.isBabyMakerActive = true;
+    this.babyMakerBabyCount = babyCount;
+    this.babyMakerOverlay.querySelector('.baby-count').textContent = `${babyCount} babies!`;
+
+    const minBabies = 3;
+    if (babyCount < minBabies) {
+      this.babyMakerOverlay.querySelector('.baby-message').textContent = `Keep circling! (need at least ${minBabies})`;
+    } else {
+      this.babyMakerOverlay.querySelector('.baby-message').textContent = `You can stop now or keep going!`;
+    }
+
+    this.babyMakerOverlay.classList.remove('hidden');
+  }
+
+  hideBabyMakerOverlay() {
+    this.isBabyMakerActive = false;
+    this.babyMakerOverlay.classList.add('hidden');
   }
 
   showStatusPanel(dog) {
@@ -386,6 +527,15 @@ export class UI {
     panel.querySelector('.state-value').textContent = this.formatState(dog);
     panel.querySelector('.family-value').textContent = dog.family ? `Family #${dog.family.id}` : 'None';
     panel.querySelector('.mate-value').textContent = dog.mate ? dog.mate.getDisplayName() : 'None';
+
+    // Show/hide Baby maker button based on whether dog can mate and has partner nearby
+    const babyMakerBtn = panel.querySelector('.baby-maker-btn');
+    const partner = this.findMateablePartner(dog);
+    if (dog.canMate() && partner && !dog.isCourtship) {
+      babyMakerBtn.style.display = 'flex';
+    } else {
+      babyMakerBtn.style.display = 'none';
+    }
 
     panel.classList.remove('hidden');
   }

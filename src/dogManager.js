@@ -22,6 +22,21 @@ export class DogManager {
     this.cursorWorldPos = null;
     this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
+    // Baby maker mode
+    this.babyMakerActive = false;
+    this.babyMakerDog1 = null;
+    this.babyMakerDog2 = null;
+    this.babyMakerBabies = 0;
+    this.babyMakerTimer = 0;
+    this.babyMakerMinBabies = 3;
+    this.babyMakerMaxBabies = 5;
+    this.babyMakerSpawnInterval = 1.5; // Spawn baby every 1.5 seconds of circling
+    this.babyMakerPendingBabies = 0; // Babies to spawn when stopped
+
+    // Callback for UI updates
+    this.onBabyMakerUpdate = null;
+    this.onBabyMakerEnd = null;
+
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
   }
 
@@ -209,7 +224,128 @@ export class DogManager {
     this.spawnPuppy(family, babyPos);
   }
 
+  startBabyMaker(dog1, dog2) {
+    this.babyMakerActive = true;
+    this.babyMakerDog1 = dog1;
+    this.babyMakerDog2 = dog2;
+    this.babyMakerBabies = 0;
+    this.babyMakerTimer = 0;
+    this.babyMakerPendingBabies = 0;
+
+    // Start both dogs in courtship mode
+    dog1.startCourtship(dog2);
+    dog2.startCourtship(dog1);
+
+    // Override normal courtship - they won't auto-breed
+    dog1.courtshipTimer = -9999; // Prevent auto-completion
+    dog2.courtshipTimer = -9999;
+
+    console.log('Baby maker mode started!');
+
+    if (this.onBabyMakerUpdate) {
+      this.onBabyMakerUpdate(0);
+    }
+  }
+
+  stopBabyMaker() {
+    if (!this.babyMakerActive) return;
+
+    const dog1 = this.babyMakerDog1;
+    const dog2 = this.babyMakerDog2;
+
+    // Calculate how many babies to spawn
+    const babiesToSpawn = Math.max(this.babyMakerMinBabies, this.babyMakerBabies);
+    const babiesToAdd = babiesToSpawn - this.babyMakerBabies;
+
+    // Handle breeding (creates family if needed)
+    this.handleBreedingForBabyMaker(dog1, dog2, babiesToSpawn);
+
+    // End courtship for both
+    dog1.endCourtship();
+    dog2.endCourtship();
+
+    this.babyMakerActive = false;
+    this.babyMakerDog1 = null;
+    this.babyMakerDog2 = null;
+
+    console.log(`Baby maker stopped! Spawned ${babiesToSpawn} babies total`);
+
+    if (this.onBabyMakerEnd) {
+      this.onBabyMakerEnd(babiesToSpawn);
+    }
+  }
+
+  handleBreedingForBabyMaker(dog1, dog2, totalBabies) {
+    // Determine male and female
+    const male = dog1.gender === GENDER.MALE ? dog1 : dog2;
+    const female = dog1.gender === GENDER.FEMALE ? dog1 : dog2;
+
+    let family;
+
+    // If they were just dogs, they become parents now
+    if (male.lifeStage === LIFE_STAGE.DOG && female.lifeStage === LIFE_STAGE.DOG) {
+      male.evolveToParent();
+      female.evolveToParent();
+      male.mate = female;
+      female.mate = male;
+
+      family = new Family(male, female);
+      this.families.push(family);
+
+      console.log('New family formed!');
+    } else {
+      family = male.family || female.family;
+    }
+
+    // Spawn all babies
+    for (let i = 0; i < totalBabies; i++) {
+      const babyPos = new THREE.Vector3()
+        .addVectors(male.model.position, female.model.position)
+        .multiplyScalar(0.5);
+
+      // Spread babies out in a circle
+      const angle = (i / totalBabies) * Math.PI * 2;
+      const radius = 1 + Math.random() * 2;
+      babyPos.x += Math.cos(angle) * radius;
+      babyPos.z += Math.sin(angle) * radius;
+
+      // Add some height so they fall in
+      babyPos.y = 2 + Math.random() * 2;
+
+      const puppy = this.spawnPuppy(family, babyPos);
+      puppy.isFlying = true;
+      puppy.velocity.set(0, 0, 0);
+    }
+  }
+
+  updateBabyMaker(delta) {
+    if (!this.babyMakerActive) return;
+
+    this.babyMakerTimer += delta;
+
+    // Spawn a new baby every interval (up to max)
+    if (this.babyMakerTimer >= this.babyMakerSpawnInterval && this.babyMakerBabies < this.babyMakerMaxBabies) {
+      this.babyMakerTimer = 0;
+      this.babyMakerBabies++;
+
+      if (this.onBabyMakerUpdate) {
+        this.onBabyMakerUpdate(this.babyMakerBabies);
+      }
+
+      console.log(`Baby maker: ${this.babyMakerBabies} babies earned!`);
+    }
+
+    // Keep the dogs circling (reset their courtship timer so they don't auto-breed)
+    if (this.babyMakerDog1 && this.babyMakerDog2) {
+      this.babyMakerDog1.courtshipTimer = -9999;
+      this.babyMakerDog2.courtshipTimer = -9999;
+    }
+  }
+
   update(delta) {
+    // Update baby maker mode
+    this.updateBabyMaker(delta);
+
     for (const dog of this.dogs) {
       dog.update(delta, this.cursorWorldPos, this.dogs);
     }

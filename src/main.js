@@ -70,6 +70,24 @@ dogController.onExitDogMode = () => {
   // Camera will smoothly return via orbit controls
 };
 
+// Wire up UI -> baby maker mode
+ui.onBabyMaker = (dog, partner) => {
+  dogManager.startBabyMaker(dog, partner);
+};
+
+ui.onStopBabyMaker = () => {
+  dogManager.stopBabyMaker();
+};
+
+// Wire up dogManager -> UI for baby maker updates
+dogManager.onBabyMakerUpdate = (babyCount) => {
+  ui.showBabyMakerOverlay(babyCount);
+};
+
+dogManager.onBabyMakerEnd = (totalBabies) => {
+  ui.hideBabyMakerOverlay();
+};
+
 // Load dogs
 dogManager.load().catch((err) => {
   console.error('Failed to load dogs:', err);
