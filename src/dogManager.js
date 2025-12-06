@@ -247,18 +247,17 @@ export class DogManager {
     }
   }
 
-  stopBabyMaker() {
-    if (!this.babyMakerActive) return;
+  stopBabyMaker(puppyCustomizations = []) {
+    if (!this.babyMakerActive) return [];
 
     const dog1 = this.babyMakerDog1;
     const dog2 = this.babyMakerDog2;
 
     // Calculate how many babies to spawn
     const babiesToSpawn = Math.max(this.babyMakerMinBabies, this.babyMakerBabies);
-    const babiesToAdd = babiesToSpawn - this.babyMakerBabies;
 
-    // Handle breeding (creates family if needed)
-    this.handleBreedingForBabyMaker(dog1, dog2, babiesToSpawn);
+    // Handle breeding (creates family if needed) with customizations
+    const spawnedPuppies = this.handleBreedingForBabyMaker(dog1, dog2, babiesToSpawn, puppyCustomizations);
 
     // End courtship for both
     dog1.endCourtship();
@@ -273,9 +272,11 @@ export class DogManager {
     if (this.onBabyMakerEnd) {
       this.onBabyMakerEnd(babiesToSpawn);
     }
+
+    return spawnedPuppies;
   }
 
-  handleBreedingForBabyMaker(dog1, dog2, totalBabies) {
+  handleBreedingForBabyMaker(dog1, dog2, totalBabies, puppyCustomizations = []) {
     // Determine male and female
     const male = dog1.gender === GENDER.MALE ? dog1 : dog2;
     const female = dog1.gender === GENDER.FEMALE ? dog1 : dog2;
@@ -297,7 +298,8 @@ export class DogManager {
       family = male.family || female.family;
     }
 
-    // Spawn all babies
+    // Spawn all babies with customizations
+    const spawnedPuppies = [];
     for (let i = 0; i < totalBabies; i++) {
       const babyPos = new THREE.Vector3()
         .addVectors(male.model.position, female.model.position)
@@ -312,10 +314,37 @@ export class DogManager {
       // Add some height so they fall in
       babyPos.y = 2 + Math.random() * 2;
 
-      const puppy = this.spawnPuppy(family, babyPos);
+      // Get customization for this puppy
+      const customization = puppyCustomizations[i] || {};
+      const gender = customization.gender === 'male' ? GENDER.MALE :
+                     customization.gender === 'female' ? GENDER.FEMALE :
+                     (Math.random() > 0.5 ? GENDER.MALE : GENDER.FEMALE);
+
+      const puppy = this.spawnPuppyWithCustomization(family, babyPos, gender, customization);
       puppy.isFlying = true;
       puppy.velocity.set(0, 0, 0);
+      spawnedPuppies.push(puppy);
     }
+
+    return spawnedPuppies;
+  }
+
+  spawnPuppyWithCustomization(family, position, gender, customization = {}) {
+    const puppy = this.createDog({
+      gender: gender,
+      lifeStage: LIFE_STAGE.PUPPY,
+      age: 0,
+      position: position,
+      customColorTint: customization.colorTint || null,
+      customName: customization.name || null,
+    });
+
+    if (family) {
+      family.addChild(puppy);
+    }
+
+    console.log(`New ${puppy.gender} puppy born: ${puppy.customName || 'unnamed'}!`);
+    return puppy;
   }
 
   updateBabyMaker(delta) {

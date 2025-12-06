@@ -48,6 +48,9 @@ const interactionManager = new InteractionManager(scene, camera, renderer, dogMa
 // UI (toolbar and status panel)
 const ui = new UI(dogManager);
 
+// Initialize label renderer for nametags
+ui.initLabelRenderer(renderer);
+
 // Dog controller (third-person mode)
 const dogController = new DogController(camera, controls);
 
@@ -71,21 +74,34 @@ dogController.onExitDogMode = () => {
 };
 
 // Wire up UI -> baby maker mode
+let babyMakerParents = { dog1: null, dog2: null };
+
 ui.onBabyMaker = (dog, partner) => {
+  babyMakerParents = { dog1: dog, dog2: partner };
   dogManager.startBabyMaker(dog, partner);
 };
 
-ui.onStopBabyMaker = () => {
-  dogManager.stopBabyMaker();
+ui.onStopBabyMaker = (puppyCustomizations) => {
+  const spawnedPuppies = dogManager.stopBabyMaker(puppyCustomizations);
+
+  // Create nametags for puppies that have custom names
+  if (spawnedPuppies && Array.isArray(spawnedPuppies)) {
+    spawnedPuppies.forEach((puppy) => {
+      if (puppy.customName) {
+        ui.createNametag(puppy, puppy.customName);
+      }
+    });
+  }
 };
 
 // Wire up dogManager -> UI for baby maker updates
 dogManager.onBabyMakerUpdate = (babyCount) => {
-  ui.showBabyMakerOverlay(babyCount);
+  ui.showBabyMakerOverlay(babyCount, babyMakerParents.dog1, babyMakerParents.dog2);
 };
 
 dogManager.onBabyMakerEnd = (totalBabies) => {
   ui.hideBabyMakerOverlay();
+  babyMakerParents = { dog1: null, dog2: null };
 };
 
 // Load dogs

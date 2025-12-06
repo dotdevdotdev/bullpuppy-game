@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { LIFE_STAGE, GENDER, AGE } from './config.js';
 
 export class UI {
@@ -14,6 +15,10 @@ export class UI {
     // Baby maker state
     this.isBabyMakerActive = false;
     this.babyMakerBabyCount = 0;
+    this.pendingPuppies = []; // Array of {name, colorTint} for customized puppies
+
+    // CSS2D renderer for nametags
+    this.labelRenderer = null;
 
     this.createToolbar();
     this.createStatusPanel();
@@ -231,7 +236,7 @@ export class UI {
         bottom: 80px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(255, 105, 180, 0.9);
+        background: rgba(255, 105, 180, 0.95);
         border-radius: 12px;
         padding: 16px 24px;
         z-index: 150;
@@ -239,6 +244,9 @@ export class UI {
         color: white;
         text-align: center;
         box-shadow: 0 4px 20px rgba(255, 105, 180, 0.4);
+        max-width: 90vw;
+        max-height: 70vh;
+        overflow-y: auto;
       }
 
       #baby-maker-overlay.hidden {
@@ -254,6 +262,110 @@ export class UI {
       #baby-maker-overlay .baby-message {
         font-size: 14px;
         margin-bottom: 12px;
+      }
+
+      /* Puppy preview grid */
+      .puppy-previews {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        margin: 16px 0;
+        max-width: 600px;
+      }
+
+      .puppy-card {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 10px;
+        width: 110px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .puppy-card .puppy-icon {
+        font-size: 28px;
+      }
+
+      .puppy-card .puppy-gender {
+        font-size: 11px;
+        opacity: 0.8;
+      }
+
+      .puppy-card .color-swatch {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        cursor: pointer;
+        transition: transform 0.2s;
+      }
+
+      .puppy-card .color-swatch:hover {
+        transform: scale(1.1);
+      }
+
+      .puppy-card .color-controls {
+        display: flex;
+        gap: 4px;
+      }
+
+      .puppy-card .color-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 12px;
+        cursor: pointer;
+        color: white;
+      }
+
+      .puppy-card .color-btn:hover {
+        background: rgba(255, 255, 255, 0.4);
+      }
+
+      .puppy-card .name-input {
+        width: 90px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .puppy-card .name-input::placeholder {
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .puppy-card .name-input:focus {
+        outline: none;
+        border-color: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      /* Nametag labels */
+      .dog-nametag {
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-family: system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+
+      .dog-nametag.male {
+        border-bottom: 2px solid #6495ED;
+      }
+
+      .dog-nametag.female {
+        border-bottom: 2px solid #FFB6C1;
       }
 
       /* Cursor styles */
@@ -464,20 +576,115 @@ export class UI {
     overlay.innerHTML = `
       <div class="baby-count">0 babies!</div>
       <div class="baby-message">Keep circling for more babies...</div>
+      <div class="puppy-previews"></div>
       <button class="action-btn stop-btn">
-        <span class="action-icon">✋</span>
-        <span class="action-label">Stop!</span>
+        <span class="action-icon">🐕</span>
+        <span class="action-label">New Puppies!</span>
       </button>
     `;
     document.body.appendChild(overlay);
 
     overlay.querySelector('.stop-btn').addEventListener('click', () => {
       if (this.onStopBabyMaker) {
-        this.onStopBabyMaker();
+        // Collect puppy customizations before stopping
+        this.collectPuppyCustomizations();
+        this.onStopBabyMaker(this.pendingPuppies);
       }
     });
 
     this.babyMakerOverlay = overlay;
+  }
+
+  // Generate a random color variation based on parents
+  generatePuppyColor(parentTint1, parentTint2) {
+    // Mix parents' colors with some random variation
+    const mixRatio = Math.random();
+    const variation = 0.15; // How much to vary from parents
+
+    return {
+      hue: (parentTint1.hue * mixRatio + parentTint2.hue * (1 - mixRatio)) + (Math.random() - 0.5) * variation,
+      saturation: (parentTint1.saturation * mixRatio + parentTint2.saturation * (1 - mixRatio)) * (0.85 + Math.random() * 0.3),
+      lightness: (parentTint1.lightness * mixRatio + parentTint2.lightness * (1 - mixRatio)) + (Math.random() - 0.5) * variation
+    };
+  }
+
+  // Convert color tint to CSS color for preview swatch
+  tintToCSS(tint) {
+    // Base bulldog color (tan/brown)
+    const baseH = 0.08; // ~30 degrees, tan
+    const baseS = 0.5;
+    const baseL = 0.55;
+
+    const h = ((baseH + tint.hue) % 1) * 360;
+    const s = Math.min(100, Math.max(0, baseS * tint.saturation * 100));
+    const l = Math.min(100, Math.max(0, (baseL + tint.lightness) * 100));
+
+    return `hsl(${h}, ${s}%, ${l}%)`;
+  }
+
+  // Generate random puppy names
+  getRandomPuppyName(gender) {
+    const boyNames = ['Max', 'Buddy', 'Charlie', 'Cooper', 'Rocky', 'Bear', 'Duke', 'Tucker', 'Jack', 'Toby', 'Zeus', 'Bruno', 'Buster', 'Ace', 'Rex'];
+    const girlNames = ['Bella', 'Luna', 'Daisy', 'Lucy', 'Sadie', 'Molly', 'Lola', 'Sophie', 'Chloe', 'Penny', 'Rosie', 'Ruby', 'Stella', 'Willow', 'Zoey'];
+    const names = gender === 'male' ? boyNames : girlNames;
+    return names[Math.floor(Math.random() * names.length)];
+  }
+
+  // Add a new puppy preview card
+  addPuppyPreview(index, gender, parentTint1, parentTint2) {
+    const container = this.babyMakerOverlay.querySelector('.puppy-previews');
+    const colorTint = this.generatePuppyColor(parentTint1, parentTint2);
+    const name = this.getRandomPuppyName(gender);
+
+    // Store in pending puppies array
+    if (!this.pendingPuppies[index]) {
+      this.pendingPuppies[index] = { name, colorTint, gender };
+    }
+
+    const card = document.createElement('div');
+    card.className = 'puppy-card';
+    card.dataset.index = index;
+    card.innerHTML = `
+      <span class="puppy-icon">🐕</span>
+      <span class="puppy-gender">${gender === 'male' ? 'Boy' : 'Girl'}</span>
+      <div class="color-swatch" style="background: ${this.tintToCSS(colorTint)}"></div>
+      <div class="color-controls">
+        <button class="color-btn randomize-btn" title="Randomize color">🎲</button>
+      </div>
+      <input type="text" class="name-input" value="${name}" placeholder="Name..." maxlength="12">
+    `;
+
+    // Randomize color button
+    card.querySelector('.randomize-btn').addEventListener('click', () => {
+      const newTint = this.generatePuppyColor(parentTint1, parentTint2);
+      this.pendingPuppies[index].colorTint = newTint;
+      card.querySelector('.color-swatch').style.background = this.tintToCSS(newTint);
+    });
+
+    // Name input
+    card.querySelector('.name-input').addEventListener('input', (e) => {
+      this.pendingPuppies[index].name = e.target.value;
+    });
+
+    container.appendChild(card);
+  }
+
+  // Collect final puppy customizations before spawning
+  collectPuppyCustomizations() {
+    const cards = this.babyMakerOverlay.querySelectorAll('.puppy-card');
+    cards.forEach((card, i) => {
+      const nameInput = card.querySelector('.name-input');
+      if (this.pendingPuppies[i]) {
+        this.pendingPuppies[i].name = nameInput.value || this.pendingPuppies[i].name;
+      }
+    });
+  }
+
+  // Clear puppy previews
+  clearPuppyPreviews() {
+    const container = this.babyMakerOverlay.querySelector('.puppy-previews');
+    container.innerHTML = '';
+    this.pendingPuppies = [];
   }
 
   findMateablePartner(dog) {
@@ -500,16 +707,32 @@ export class UI {
     return null;
   }
 
-  showBabyMakerOverlay(babyCount) {
+  showBabyMakerOverlay(babyCount, parent1 = null, parent2 = null) {
     this.isBabyMakerActive = true;
+
+    // Store parent tints for generating puppy colors
+    if (parent1 && parent2 && !this.parentTint1) {
+      this.parentTint1 = parent1.getColorTint();
+      this.parentTint2 = parent2.getColorTint();
+    }
+
+    // Check if we need to add more puppy previews
+    const previousCount = this.babyMakerBabyCount;
     this.babyMakerBabyCount = babyCount;
-    this.babyMakerOverlay.querySelector('.baby-count').textContent = `${babyCount} babies!`;
+
+    // Add new puppy cards for any new babies
+    for (let i = previousCount; i < babyCount; i++) {
+      const gender = Math.random() > 0.5 ? 'male' : 'female';
+      this.addPuppyPreview(i, gender, this.parentTint1 || { hue: 0, saturation: 1, lightness: 0 }, this.parentTint2 || { hue: 0, saturation: 1, lightness: 0 });
+    }
+
+    this.babyMakerOverlay.querySelector('.baby-count').textContent = `${babyCount} ${babyCount === 1 ? 'baby' : 'babies'}!`;
 
     const minBabies = 3;
     if (babyCount < minBabies) {
       this.babyMakerOverlay.querySelector('.baby-message').textContent = `Keep circling! (need at least ${minBabies})`;
     } else {
-      this.babyMakerOverlay.querySelector('.baby-message').textContent = `You can stop now or keep going!`;
+      this.babyMakerOverlay.querySelector('.baby-message').textContent = `Customize your puppies below!`;
     }
 
     this.babyMakerOverlay.classList.remove('hidden');
@@ -518,6 +741,10 @@ export class UI {
   hideBabyMakerOverlay() {
     this.isBabyMakerActive = false;
     this.babyMakerOverlay.classList.add('hidden');
+    this.clearPuppyPreviews();
+    this.parentTint1 = null;
+    this.parentTint2 = null;
+    this.babyMakerBabyCount = 0;
   }
 
   showStatusPanel(dog) {
@@ -599,5 +826,41 @@ export class UI {
     if (this.selectedDog && !this.statusPanel.classList.contains('hidden')) {
       this.showStatusPanel(this.selectedDog);
     }
+
+    // Update label renderer if it exists
+    if (this.labelRenderer) {
+      this.labelRenderer.render(this.dogManager.scene, this.dogManager.camera);
+    }
+  }
+
+  // Initialize CSS2D label renderer for nametags
+  initLabelRenderer(renderer) {
+    this.labelRenderer = new CSS2DRenderer();
+    this.labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    this.labelRenderer.domElement.style.position = 'absolute';
+    this.labelRenderer.domElement.style.top = '0';
+    this.labelRenderer.domElement.style.pointerEvents = 'none';
+    document.body.appendChild(this.labelRenderer.domElement);
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      if (this.labelRenderer) {
+        this.labelRenderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    });
+  }
+
+  // Create a nametag for a dog
+  createNametag(dog, name) {
+    const div = document.createElement('div');
+    div.className = `dog-nametag ${dog.gender}`;
+    div.textContent = name;
+
+    const label = new CSS2DObject(div);
+    label.position.set(0, 2.5 * dog.getScale(), 0); // Above the dog's head
+
+    dog.model.add(label);
+    dog.nametag = label;
+    dog.customName = name;
   }
 }

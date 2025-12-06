@@ -31,6 +31,11 @@ export class Dog {
     this.courtshipJumpTimer = 0;
     this.courtshipAngle = Math.random() * Math.PI * 2;
 
+    // Custom appearance (set by baby maker)
+    this.customColorTint = options.customColorTint || null;
+    this.customName = options.customName || null;
+    this.nametag = null;
+
     // Clone and setup model
     this.model = clone(baseModel);
 
@@ -121,7 +126,8 @@ export class Dog {
   }
 
   getColorTint() {
-    return COLOR_TINTS[this.getTypeKey()];
+    // Use custom color tint if set, otherwise use default for type
+    return this.customColorTint || COLOR_TINTS[this.getTypeKey()];
   }
 
   getWalkSpeed() {
@@ -589,6 +595,11 @@ export class Dog {
   }
 
   getDisplayName() {
+    // Use custom name if set
+    if (this.customName) {
+      return this.customName;
+    }
+
     const genderName = this.gender === GENDER.MALE ? 'Boy' : 'Girl';
     const stageName = {
       [LIFE_STAGE.PUPPY]: 'Puppy',
