@@ -157,4 +157,5 @@ animate();
 
 console.log('Bullpuppy Family Simulation loaded!');
 console.log('Click dogs to see their stats. Drag to pick up and fling!');
+console.log('Shift+click to create an explosion that launches nearby dogs!');
 console.log('Use the toolbar to spawn new dogs.');

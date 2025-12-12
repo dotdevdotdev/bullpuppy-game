@@ -27,6 +27,11 @@ export class InteractionManager {
     this.dragHistory = [];
     this.maxDragHistory = 5;
 
+    // Explosion settings
+    this.explosionRadius = 8;
+    this.explosionForce = 150;
+    this.explosionUpwardBias = 0.7; // 0-1, higher = more upward
+
     // Callbacks
     this.onDogSelected = null;
     this.onDogDeselected = null;
@@ -138,6 +143,12 @@ export class InteractionManager {
   onMouseDown(event) {
     if (event.button !== 0) return; // Left click only
 
+    // Shift+click creates an invisible explosion
+    if (event.shiftKey) {
+      this.triggerExplosion();
+      return;
+    }
+
     this.clickStartPos = { x: event.clientX, y: event.clientY };
     this.clickStartTime = Date.now();
     this.isDragging = false;
@@ -213,6 +224,46 @@ export class InteractionManager {
     velocity.y = Math.max(5, velocity.length() * 0.3);
 
     return velocity;
+  }
+
+  triggerExplosion() {
+    const explosionCenter = this.getMouseWorldPos();
+    if (!explosionCenter) return;
+
+    for (const dog of this.dogManager.dogs) {
+      // Skip picked dogs
+      if (dog.isPicked) continue;
+
+      const dogPos = dog.model.position;
+      const distance = dogPos.distanceTo(explosionCenter);
+
+      if (distance < this.explosionRadius) {
+        // Calculate force falloff (stronger near center)
+        const falloff = 1 - (distance / this.explosionRadius);
+        const force = this.explosionForce * falloff * falloff; // Quadratic falloff
+
+        // Direction away from explosion center (horizontal)
+        const direction = new THREE.Vector3()
+          .subVectors(dogPos, explosionCenter);
+        direction.y = 0;
+
+        // Handle dogs directly at center
+        if (direction.length() < 0.01) {
+          direction.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+        }
+        direction.normalize();
+
+        // Apply velocity: outward + upward
+        dog.velocity.set(
+          direction.x * force * (1 - this.explosionUpwardBias),
+          force * this.explosionUpwardBias * 1.5, // Extra upward boost
+          direction.z * force * (1 - this.explosionUpwardBias)
+        );
+
+        dog.isFlying = true;
+        dog.isPicked = false;
+      }
+    }
   }
 
   selectDog(dog) {
